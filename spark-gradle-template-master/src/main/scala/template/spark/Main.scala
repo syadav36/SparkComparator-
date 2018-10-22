@@ -1,8 +1,9 @@
 package template.spark
 
-
+import org.apache.avro.generic.GenericData.StringType
+import org.apache.spark.sql.functions.{col, concat_ws}
 import org.apache.spark.sql.functions._
-import  org.apache.spark.sql
+import org.apache.spark.sql
 import org.apache.spark.SparkConf
 
 final case class Person(id: String,firstName: String)
@@ -37,11 +38,12 @@ object Main extends InitSpark {
       .format("org.apache.spark.csv")
       .option("header", true)
       .option("inferSchema", true) // <-- HERE
-      .csv("people-example.csv")
-
+      .csv("people-example.csv");
+//l
     df.printSchema()
+
+
     print("reading source")
-    df.show
 
     val df1=spark.read
       .format("org.apache.spark.csv")
@@ -49,11 +51,20 @@ object Main extends InitSpark {
       .option("inferSchema", true) // <-- HERE
       .csv("idread.csv")
 
+
+    //r
     df.printSchema()
     print("reading target")
     df1.show
 
 
+
+
+    //val df = Seq(("1", "2", "3"), ("2", "3", "4")).toDF("col1_term1", "col2_term2", "col3_term3")
+
+
+
+    // df_res_m
      // df.write.csv("/Users/shailesh/Documents/abc1.csv")
 
     df1.registerTempTable("TEMP_TABL")
@@ -149,6 +160,7 @@ dff.show()
 
 
     def mapDiffs(name: String) = when($"l.$name" === $"r.$name", null)
+
       .otherwise(array($"l.$name", $"r.$name"))
       .as(name)
 
@@ -156,9 +168,9 @@ dff.show()
     var df_res = df.alias("l").join(df1.alias("r"),joinExprs1,"full_outer")
       //.select($"id" :: cols.map(mapDiffs): _*)
 
-    df_res.show()
+    val df_res1=df_res.select("r.id","r.firstName","r.lastName","r.country","r.age","l.id1")
 
-
+    df_res1.show
 
 
     //val df_res= df1.alias("l")
@@ -179,30 +191,94 @@ dff.show()
  //   result.show()
 
 
-    val df_res_left= df_res
-   .filter($"$source_col".isNull )
+    val df_res_left= df_res1
+   .filter($"$target_col".isNull ).select("id","firstName","lastName","country","age")
     print("left show")
-    val df_res_left_show=df_res_left.show
-    val df_res_right= df_res
-      .filter($"$target_col".isNull)
+
+
+  df_res_left.coalesce(1).write.
+     format("com.databricks.spark.csv").option("header", "true").
+     save("/Users/shailesh/Documents/" + "Source Not Matching with target")
+
+
+    val df_res_right= df_res1
+      .filter($"$source_col".isNull).select("id1","firstName","lastName","country","age")
     print("right show")
 
-    val df_res_right_show=df_res_right.show
 
-        val df_res_match=df_res
+
+   df_res_right.dropDuplicates().coalesce(1).write.
+      format("com.databricks.spark.csv").option("header", "true").
+     save("/Users/shailesh/Documents/" + "Target Value  not matching with source")
+
+
+    val df_res_match=df_res
           .filter($"$source_col" === $"$target_col" ).dropDuplicates()
-          .select($"id" :: $"id1" ::cols.map(mapDiffs): _*)
+
+    .select($"id" :: $"id1" ::cols.map(mapDiffs): _*)
 
 
-    df_res_match.show
-
-    import spark.implicits._
-    import org.apache.spark.sql.functions._
-
-    //x.withColumn("age", to_json(struct($"age"))).show()
+    //df_res_match.foreach { row =>
+    //  println(row.mkString(","))
+   // }
 
 
-    close
+
+
+    val stringify = udf((vs: Seq[String]) => vs match {
+      case null => null
+      case _    => s"""[${vs.mkString(",")}]"""
+    })
+
+
+  val column_names: Array[String] = df_res_match.drop("id").drop("id1")
+      .select("*").
+      columns
+
+
+
+
+
+    val  column_frame = df_res_match.withColumn("age", 'age cast "string").
+      withColumn("lastName", 'lastName cast "string").
+      withColumn("country", 'country cast "string").
+      withColumn("firstName", 'firstName cast "string").
+      drop("id1").select("id","age","lastName","firstName","country").
+      coalesce(1).write.
+      format("com.databricks.spark.csv").option("header", "true").
+      save("/Users/shailesh/Documents/" + "Source_Target_mismatch")
+
+    //drop().select (concat_ws(",", selection: _*)
+    //df_res_match.select(concat($"age.cast("array<string>",$"country")).show()
+
+
+/*
+
+        for(i <- 0 until column_names.length){
+          var str=column_names(i)
+          println("i'th element is: " + column_names(i))
+          column_frame.withColumn(column_names(i), stringify($"$str")).select(str).
+            coalesce(1).write.
+          format("com.databricks.spark.csv").option("header", "true").
+            save("/Users/shailesh/Documents/"+ str + "Missing in Target")
+
+
+        }
+
+
+*/
+      // df_res_match.withColumn("lastName", stringify($"lastName")).select("lastName").show
+      // coalesce(1).write.
+      //format("com.databricks.spark.csv").option("header", "true").save("/Users/shailesh/Documents/zz1.csv" + "Missing in Target")
+
+      // df_res_match.coalesce(1).write.
+      // format("com.databricks.spark.csv").option("header", "true").save("/Users/shailesh/Documents" + "Missing in Target")
+
+
+      //---String Conversion
+
+
+      close
   }
 }
 
