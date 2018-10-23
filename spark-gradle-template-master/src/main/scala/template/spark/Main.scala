@@ -40,6 +40,8 @@ object Main extends InitSpark {
       .option("inferSchema", true) // <-- HERE
       .csv("people-example.csv");
 //l
+
+
     df.printSchema()
 
 
@@ -50,6 +52,9 @@ object Main extends InitSpark {
       .option("header", true)
       .option("inferSchema", true) // <-- HERE
       .csv("idread.csv")
+
+
+
 
 
     //r
@@ -150,7 +155,8 @@ dff.show()
 //***********************************************mysql read end
 
     var columnsdf1=Seq((Array(1,1))).toDF("id").columns
-    var  columnsdf2 =Seq((Array(1,1))).toDF("id1").columns
+    var  columnsdf2 =Seq((Array(1,1))
+    ).toDF("id1").columns
 
     var joinExprs1 = columnsdf1
       .zip(columnsdf2)
@@ -168,11 +174,14 @@ dff.show()
     var df_res = df.alias("l").join(df1.alias("r"),joinExprs1,"full_outer")
       //.select($"id" :: cols.map(mapDiffs): _*)
 
-    val df_res1=df_res.select("r.id","r.firstName","r.lastName","r.country","r.age","l.id1")
+    //selecting all fields with primary key combo
+    val df_res1=df_res.select("r.*","l.id1").alias("src")
+    val df_res2=df_res.select("l.*","r.id").alias("tgt")
+
 
     df_res1.show
 
-
+println("printing")
     //val df_res= df1.alias("l")
      // .join(df.alias("r"),
      //   $"$source_col" === $"$target_col",
@@ -192,17 +201,17 @@ dff.show()
 
 
     val df_res_left= df_res1
-   .filter($"$target_col".isNull ).select("id","firstName","lastName","country","age")
+   .filter($"$target_col".isNull ).select("src.*")
     print("left show")
 
 
-  df_res_left.coalesce(1).write.
+    df_res_left.select("src.*").coalesce(1).write.
      format("com.databricks.spark.csv").option("header", "true").
      save("/Users/shailesh/Documents/" + "Source Not Matching with target")
 
 
-    val df_res_right= df_res1
-      .filter($"$source_col".isNull).select("id1","firstName","lastName","country","age")
+    val df_res_right= df_res2
+      .filter($"$source_col".isNull).select("tgt.*")
     print("right show")
 
 
